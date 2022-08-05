@@ -24,7 +24,7 @@ cluster = LPCCondorCluster(
     transfer_input_files=["boostedhiggs"],
     ship_env=True,
     memory="12GB",
-#    image="coffeateam/coffea-dask:0.7.11-fastjet-3.3.4.0rc9-ga05a1f8",
+    image="coffeateam/coffea-dask:0.7.16-fastjet-3.3.4.0rc9-gc4ca259"
 )
 
 if not os.path.isdir('outfiles/'):
@@ -58,7 +58,7 @@ with Client(cluster) as client:
 
             uproot.open.defaults["xrootd_handler"] = uproot.source.xrootd.MultithreadedXRootDSource
 
-            p = VBFProcessor(year=year,jet_arbitration='ddb',ewkHcorr=True,systematics=True)
+            p = VBFProcessor(year=year,jet_arbitration='ddb',ewkHcorr=True,systematics=True,skipJER=False)
             args = {'savemetrics':True, 'schema':NanoAODSchema}
 
             output = processor.run_uproot_job(
