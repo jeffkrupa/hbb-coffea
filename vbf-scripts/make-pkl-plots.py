@@ -9,10 +9,8 @@ import numpy as np
 from coffea import processor, util, hist
 import pickle
 
-lumis = {}
-lumis['2016'] = 35.9
-lumis['2017'] = 41.5
-lumis['2018'] = 59.9
+with open('lumi.json') as f:
+    lumis = json.load(f)
 
 # Main method
 def main():
@@ -33,7 +31,7 @@ def main():
         pmap = json.load(f)
             
     indir = "outfiles-plots/"
-    infiles = subprocess.getoutput("ls "+indir+year+"*.coffea").split()
+    infiles = subprocess.getoutput("ls "+indir+year+"_*.coffea").split()
     outsum = processor.dict_accumulator()
 
     # Check if pickle exists, remove it if it does

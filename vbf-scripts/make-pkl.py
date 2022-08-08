@@ -9,15 +9,8 @@ import numpy as np
 from coffea import processor, util, hist
 import pickle
 
-lumis = {}
-lumis['2016'] = 35.9
-lumis['2017'] = 41.5
-lumis['2018'] = 59.9
-
 # Main method
 def main():
-
-    raw = False
 
     if len(sys.argv) < 2:
         print("Enter year")
@@ -30,9 +23,12 @@ def main():
         
     with open('pmap.json') as f:
         pmap = json.load(f)
+
+    with open('lumi.json') as f:
+        lumis = json.load(f)
             
     indir = "outfiles/"
-    infiles = subprocess.getoutput("ls "+indir+year+"*.coffea").split()
+    infiles = subprocess.getoutput("ls "+indir+year+"_dask_*.coffea").split()
     outsum = processor.dict_accumulator()
 
     # Check if pickle exists, remove it if it does
@@ -58,11 +54,11 @@ def main():
 
             del out
 
-    scale_lumi = {k: xs[k] * 1000 *lumis[year] / w for k, w in outsum['sumw'].items()} 
+    scale_lumi = {k: xs[k] * 1000 * lumis[year] / w for k, w in outsum['sumw'].items()} 
 
     outsum['templates'].scale(scale_lumi, 'dataset')
 
-    print(len(outsum['templates'].identifiers('dataset')))
+    print(outsum['templates'].identifiers('dataset'))
 
     templates = outsum['templates'].group('dataset', hist.Cat('process', 'Process'), pmap)
 

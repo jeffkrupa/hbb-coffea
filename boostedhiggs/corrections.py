@@ -6,6 +6,7 @@ import cloudpickle
 import importlib.resources
 import correctionlib
 from coffea.lookup_tools.lookup_base import lookup_base
+from coffea.lookup_tools.dense_lookup import dense_lookup
 from coffea import lookup_tools
 from coffea import util
 
@@ -13,43 +14,40 @@ with importlib.resources.path("boostedhiggs.data", "corrections.pkl.gz") as path
     with gzip.open(path) as fin:
         compiled = pickle.load(fin)
 
-# hotfix some crazy large weights
-compiled['2017_pileupweight']._values = np.minimum(5, compiled['2017_pileupweight']._values)
-compiled['2017_pileupweight_puUp']._values = np.minimum(5, compiled['2017_pileupweight_puUp']._values)
-compiled['2017_pileupweight_puDown']._values = np.minimum(5, compiled['2017_pileupweight_puDown']._values)
-compiled['2018_pileupweight']._values = np.minimum(5, compiled['2018_pileupweight']._values)
-compiled['2018_pileupweight_puUp']._values = np.minimum(5, compiled['2018_pileupweight_puUp']._values)
-compiled['2018_pileupweight_puDown']._values = np.minimum(5, compiled['2018_pileupweight_puDown']._values)
+ddt = util.load(f"boostedhiggs/data/ddtmap_n2b1_UL.coffea")
+ddt_dict = {}
 
-with importlib.resources.path("boostedhiggs.data", 'powhegToMinloPtCC.coffea') as filename:
-    compiled['powheg_to_nnlops'] = util.load(filename)
+for year in ["2016APV", "2016", "2017","2018"]:
+    h = ddt[year].to_hist()
+    lookup = dense_lookup(h.view(), (h.axes[0].edges, h.axes[1].edges))
+    ddt_dict[year] = lookup
 
-class SoftDropWeight(lookup_base):
-    def _evaluate(self, pt, eta):
-        gpar = np.array([1.00626, -1.06161, 0.0799900, 1.20454])
-        cpar = np.array([1.09302, -0.000150068, 3.44866e-07, -2.68100e-10, 8.67440e-14, -1.00114e-17])
-        fpar = np.array([1.27212, -0.000571640, 8.37289e-07, -5.20433e-10, 1.45375e-13, -1.50389e-17])
-        genw = gpar[0] + gpar[1]*np.power(pt*gpar[2], -gpar[3])
-        ptpow = np.power.outer(pt, np.arange(cpar.size))
-        cenweight = np.dot(ptpow, cpar)
-        forweight = np.dot(ptpow, fpar)
-        weight = np.where(np.abs(eta) < 1.3, cenweight, forweight)
-        return genw*weight
-
-
-_softdrop_weight = SoftDropWeight()
-
+# Updated for UL
+with importlib.resources.path("boostedhiggs.data", "msdcorr.json") as filename:
+    msdcorr = correctionlib.CorrectionSet.from_file(str(filename))
 
 def corrected_msoftdrop(fatjets):
-    sf = _softdrop_weight(fatjets.pt, fatjets.eta)
-    sf = np.maximum(1e-5, sf)
-    dazsle_msd = (fatjets.subjets * (1 - fatjets.subjets.rawFactor)).sum()
-    return dazsle_msd.mass * sf
+    msdraw = np.sqrt(
+        np.maximum(
+            0.0,
+            (fatjets.subjets * (1 - fatjets.subjets.rawFactor)).sum().mass2,
+        )
+    )
+    msoftdrop = fatjets.msoftdrop
+    msdfjcorr = msdraw / (1 - fatjets.rawFactor)
 
+    corr = msdcorr["msdfjcorr"].evaluate(
+        np.array(ak.flatten(msdfjcorr / fatjets.pt)),
+        np.array(ak.flatten(np.log(fatjets.pt))),
+        np.array(ak.flatten(fatjets.eta)),
+    )
+    corr = ak.unflatten(corr, ak.num(fatjets))
+    corrected_mass = msdfjcorr * corr
+
+    return corrected_mass
 
 def n2ddt_shift(fatjets, year='2017'):
-    return compiled[f'{year}_n2ddt_rho_pt'](fatjets.qcdrho, fatjets.pt)
-
+    return ddt_dict[year](fatjets.pt, fatjets.qcdrho)
 
 def powheg_to_nnlops(genpt):
     return compiled['powheg_to_nnlops'](genpt)
@@ -67,7 +65,7 @@ def add_pdf_weight(weights, pdf_weights):
 
     # NNPDF31_nnlo_hessian_pdfas
     # https://lhapdfsets.web.cern.ch/current/NNPDF31_nnlo_hessian_pdfas/NNPDF31_nnlo_hessian_pdfas.info
-    if "306000 - 306102" in docstring:
+    if True: #"306000 - 306102" in docstring:
 
         # Hessian PDF weights
         # Eq. 21 of https://arxiv.org/pdf/1510.03865v1.pdf                                   
@@ -161,15 +159,7 @@ def add_ps_weight(weights,ps_weights):
     weights.add('UEPS_FSR', nom, up_fsr, down_fsr)
 
 
-def add_pileup_weight(weights, nPU, year='2017', dataset=None):
-    if year == '2017' and dataset in compiled['2017_pileupweight_dataset']:
-        weights.add(
-            'pileup_weight',
-            compiled['2017_pileupweight_dataset'][dataset](nPU),
-            compiled['2017_pileupweight_dataset_puUp'][dataset](nPU),
-            compiled['2017_pileupweight_dataset_puDown'][dataset](nPU),
-        )
-    else:
+def add_pileup_weight(weights, nPU, year='2017'):
         weights.add(
             'pileup_weight',
             compiled[f'{year}_pileupweight'](nPU),
@@ -177,28 +167,38 @@ def add_pileup_weight(weights, nPU, year='2017', dataset=None):
             compiled[f'{year}_pileupweight_puDown'](nPU),
         )
 
+with importlib.resources.path("boostedhiggs.data", "EWHiggsCorrections.json") as filename:
+    hew_kfactors = correctionlib.CorrectionSet.from_file(str(filename))
 
-def add_VJets_NLOkFactor(weights, genBosonPt, year, dataset):
-    if year == '2017' and 'ZJetsToQQ_HT' in dataset:
-        nlo_over_lo_qcd = compiled['2017_Z_nlo_qcd'](genBosonPt)
-        nlo_over_lo_ewk = compiled['Z_nlo_over_lo_ewk'](genBosonPt)
-    elif year == '2017' and 'WJetsToQQ_HT' in dataset:
-        nlo_over_lo_qcd = compiled['2017_W_nlo_qcd'](genBosonPt)
-        nlo_over_lo_ewk = compiled['W_nlo_over_lo_ewk'](genBosonPt)
-    elif year == '2016' and 'DYJetsToQQ' in dataset:
-        nlo_over_lo_qcd = compiled['2016_Z_nlo_qcd'](genBosonPt)
-        nlo_over_lo_ewk = compiled['Z_nlo_over_lo_ewk'](genBosonPt)
-    elif year == '2016' and 'WJetsToQQ' in dataset:
-        nlo_over_lo_qcd = compiled['2016_W_nlo_qcd'](genBosonPt)
-        nlo_over_lo_ewk = compiled['W_nlo_over_lo_ewk'](genBosonPt)
-    else:
-        return
-    weights.add('VJets_NLOkFactor', nlo_over_lo_qcd * nlo_over_lo_ewk)
+def add_HiggsEW_kFactors(weights, genpart, dataset):
+    """EW Higgs corrections"""
+    def get_hpt():
+        boson = ak.firsts(genpart[
+            (genpart.pdgId == 25)
+            & genpart.hasFlags(["fromHardProcess", "isLastCopy"])
+        ])
+        return np.array(ak.fill_none(boson.pt, 0.))
 
+    if "VBF" in dataset:
+        hpt = get_hpt()
+        ewkcorr = hew_kfactors["VBF_EW"]
+        ewknom = ewkcorr.evaluate(hpt)
+        weights.add("VBF_EW", ewknom)
 
-with importlib.resources.path("boostedhiggs.data", "vjets_corrections.json") as filename:
+    if "WplusH" in dataset or "WminusH" in dataset or "ZH" in dataset:
+        hpt = get_hpt()
+        ewkcorr = hew_kfactors["VH_EW"]
+        ewknom = ewkcorr.evaluate(hpt)
+        weights.add("VH_EW", ewknom)
+
+    if "ttH" in dataset:
+        hpt = get_hpt()
+        ewkcorr = hew_kfactors["ttH_EW"]
+        ewknom = ewkcorr.evaluate(hpt)
+        weights.add("ttH_EW", ewknom)
+
+with importlib.resources.path("boostedhiggs.data", "ULvjets_corrections.json") as filename:
     vjets_kfactors = correctionlib.CorrectionSet.from_file(str(filename))
-
 
 def add_VJets_kFactors(weights, genpart, dataset):
     """Revised version of add_VJets_NLOkFactor, for both NLO EW and ~NNLO QCD"""
@@ -241,41 +241,16 @@ def add_VJets_kFactors(weights, genpart, dataset):
         for syst in systlist:
             weights.add(syst, ones, ewkcorr.evaluate(syst + "_up", vpt) / ewknom, ewkcorr.evaluate(syst + "_down", vpt) / ewknom)
 
-    if "ZJetsToQQ_HT" in dataset and "TuneCUETP8M1" in dataset:
+    if "ZJetsToQQ_HT" in dataset or "DYJetsToLL_M-50" in dataset:
         vpt = get_vpt()
-        qcdcorr = vjets_kfactors["Z_MLM2016toFXFX"].evaluate(vpt)
+        qcdcorr = vjets_kfactors["ULZ_MLMtoFXFX"].evaluate(vpt)
         ewkcorr = vjets_kfactors["Z_FixedOrderComponent"]
         add_systs(zsysts, qcdcorr, ewkcorr, vpt)
-    elif "WJetsToQQ_HT" in dataset and "TuneCUETP8M1" in dataset:
+    elif "WJetsToQQ_HT" in dataset or "WJetsToLNu" in dataset:
         vpt = get_vpt()
-        qcdcorr = vjets_kfactors["W_MLM2016toFXFX"].evaluate(vpt)
+        qcdcorr = vjets_kfactors["ULW_MLMtoFXFX"].evaluate(vpt)
         ewkcorr = vjets_kfactors["W_FixedOrderComponent"]
         add_systs(wsysts, qcdcorr, ewkcorr, vpt)
-    elif "ZJetsToQQ_HT" in dataset and "TuneCP5" in dataset:
-        vpt = get_vpt()
-        qcdcorr = vjets_kfactors["Z_MLM2017toFXFX"].evaluate(vpt)
-        ewkcorr = vjets_kfactors["Z_FixedOrderComponent"]
-        add_systs(zsysts, qcdcorr, ewkcorr, vpt)
-    elif "WJetsToQQ_HT" in dataset and "TuneCP5" in dataset:
-        vpt = get_vpt()
-        qcdcorr = vjets_kfactors["W_MLM2017toFXFX"].evaluate(vpt)
-        ewkcorr = vjets_kfactors["W_FixedOrderComponent"]
-        add_systs(wsysts, qcdcorr, ewkcorr, vpt)
-    elif ("DY1JetsToLL_M-50" in dataset or "DY2JetsToLL_M-50" in dataset) and "amcnloFXFX" in dataset:
-        vpt = get_vpt(check_offshell=True)
-        ewkcorr = vjets_kfactors["Z_FixedOrderComponent"]
-        add_systs(zsysts, None, ewkcorr, vpt)
-    elif ("W1JetsToLNu" in dataset or "W2JetsToLNu" in dataset) and "amcnloFXFX" in dataset:
-        vpt = get_vpt(check_offshell=True)
-        ewkcorr = vjets_kfactors["W_FixedOrderComponent"]
-        add_systs(wsysts, None, ewkcorr, vpt)
-
-
-def add_jetTriggerWeight(weights, jet_msd, jet_pt, year):
-    nom = compiled[f'{year}_trigweight_msd_pt'](jet_msd, jet_pt)
-    up = compiled[f'{year}_trigweight_msd_pt_trigweightUp'](jet_msd, jet_pt)
-    down = compiled[f'{year}_trigweight_msd_pt_trigweightDown'](jet_msd, jet_pt)
-    weights.add('jet_trigger', nom, up, down)
 
 
 with importlib.resources.path("boostedhiggs.data", "fatjet_triggerSF.json") as filename:
@@ -286,37 +261,16 @@ def add_jetTriggerSF(weights, leadingjet, year, selection):
     def mask(w):
         return np.where(selection.all('noleptons'), w, 1.)
 
+    # Same for 2016 and 2016APV
+    if '2016' in year:
+        year = '2016'
+
     jet_pt = np.array(ak.fill_none(leadingjet.pt, 0.))
     jet_msd = np.array(ak.fill_none(leadingjet.msoftdrop, 0.))  # note: uncorrected
     nom = mask(jet_triggerSF[f'fatjet_triggerSF{year}'].evaluate("nominal", jet_pt, jet_msd))
     up = mask(jet_triggerSF[f'fatjet_triggerSF{year}'].evaluate("stat_up", jet_pt, jet_msd))
     down = mask(jet_triggerSF[f'fatjet_triggerSF{year}'].evaluate("stat_dn", jet_pt, jet_msd))
     weights.add('jet_trigger', nom, up, down)
-
-def add_mutriggerSF(weights, leadingmuon, year, selection):
-    def mask(w):
-        return np.where(selection.all('onemuon'), w, 1.)
-
-    mu_pt = np.array(ak.fill_none(leadingmuon.pt, 0.))
-    mu_eta = np.array(ak.fill_none(abs(leadingmuon.eta), 0.))
-    nom = mask(compiled[f'{year}_mutrigweight_pt_abseta'](mu_pt, mu_eta))
-    shift = mask(compiled[f'{year}_mutrigweight_pt_abseta_mutrigweightShift'](mu_pt, mu_eta))
-    weights.add('mu_trigger', nom, shift, shift=True)
-
-def add_mucorrectionsSF(weights, leadingmuon, year, selection):
-    def mask(w):
-        return np.where(selection.all('onemuon'), w, 1.)
-
-    mu_pt = np.array(ak.fill_none(leadingmuon.pt, 0.))
-    mu_eta = np.array(ak.fill_none(abs(leadingmuon.eta), 0.))
-    nom = mask(compiled[f'{year}_muidweight_abseta_pt'](mu_eta, mu_pt))
-    shift = mask(compiled[f'{year}_muidweight_abseta_pt_muidweightShift'](mu_eta, mu_pt))
-    weights.add('mu_idweight', nom, shift, shift=True)
-
-    nom = mask(compiled[f'{year}_muisoweight_abseta_pt'](mu_eta, mu_pt))
-    shift = mask(compiled[f'{year}_muisoweight_abseta_pt_muisoweightShift'](mu_eta, mu_pt))
-    weights.add('mu_isoweight', nom, shift, shift=True)
-
 
 with importlib.resources.path("boostedhiggs.data", "jec_compiled.pkl.gz") as path:
     with gzip.open(path) as fin:
@@ -325,7 +279,6 @@ with importlib.resources.path("boostedhiggs.data", "jec_compiled.pkl.gz") as pat
 jet_factory = jmestuff["jet_factory"]
 fatjet_factory = jmestuff["fatjet_factory"]
 met_factory = jmestuff["met_factory"]
-
 
 def add_jec_variables(jets, event_rho):
     jets["pt_raw"] = (1 - jets.rawFactor)*jets.pt
@@ -342,7 +295,66 @@ def build_lumimask(filename):
 
 
 lumiMasks = {
-    '2016': build_lumimask('Cert_271036-284044_13TeV_23Sep2016ReReco_Collisions16_JSON.txt'),
-    '2017': build_lumimask('Cert_294927-306462_13TeV_EOY2017ReReco_Collisions17_JSON_v1.txt'),
-    '2018': build_lumimask('Cert_314472-325175_13TeV_17SeptEarlyReReco2018ABC_PromptEraD_Collisions18_JSON.txt'),
+    "2016": build_lumimask("Cert_271036-284044_13TeV_Legacy2016_Collisions16_JSON.txt"),
+    "2017": build_lumimask("Cert_294927-306462_13TeV_UL2017_Collisions17_GoldenJSON.txt"),
+    "2018": build_lumimask("Cert_314472-325175_13TeV_Legacy2018_Collisions18_JSON.txt"),
 }
+
+basedir = 'boostedhiggs/data/'
+mutriglist = {
+    '2016preVFP':{
+        'TRIGNOISO':'NUM_Mu50_or_TkMu50_DEN_CutBasedIdGlobalHighPt_and_TkIsoLoose_abseta_pt',
+    },
+    '2016postVFP':{
+        'TRIGNOISO':'NUM_Mu50_or_TkMu50_DEN_CutBasedIdGlobalHighPt_and_TkIsoLoose_abseta_pt',
+    },
+    '2017':{
+        'TRIGNOISO':'NUM_Mu50_or_OldMu100_or_TkMu100_DEN_CutBasedIdGlobalHighPt_and_TkIsoLoose_abseta_pt',
+    },
+    '2018':{
+        'TRIGNOISO':'NUM_Mu50_or_OldMu100_or_TkMu100_DEN_CutBasedIdGlobalHighPt_and_TkIsoLoose_abseta_pt',
+    },
+}
+
+ext = lookup_tools.extractor()
+for year in ['2016preVFP','2016postVFP','2017','2018']:
+    ext.add_weight_sets([f'muon_ID_{year}_value NUM_MediumPromptID_DEN_TrackerMuons_abseta_pt {basedir}Efficiencies_muon_generalTracks_Z_Run{year}_UL_ID.root'])
+    ext.add_weight_sets([f'muon_ID_{year}_error NUM_MediumPromptID_DEN_TrackerMuons_abseta_pt_error {basedir}Efficiencies_muon_generalTracks_Z_Run{year}_UL_ID.root'])
+
+    ext.add_weight_sets([f'muon_ISO_{year}_value NUM_LooseRelIso_DEN_MediumPromptID_abseta_pt {basedir}Efficiencies_muon_generalTracks_Z_Run{year}_UL_ISO.root'])
+    ext.add_weight_sets([f'muon_ISO_{year}_error NUM_LooseRelIso_DEN_MediumPromptID_abseta_pt_error {basedir}Efficiencies_muon_generalTracks_Z_Run{year}_UL_ISO.root'])
+
+    for trigopt in mutriglist[year]:
+        trigname = mutriglist[year][trigopt]
+        ext.add_weight_sets([f'muon_{trigopt}_{year}_value {trigname} {basedir}Efficiencies_muon_generalTracks_Z_Run{year}_UL_SingleMuonTriggers.root'])
+        ext.add_weight_sets([f'muon_{trigopt}_{year}_error {trigname}_error {basedir}Efficiencies_muon_generalTracks_Z_Run{year}_UL_SingleMuonTriggers.root'])
+ext.finalize()
+lepsf_evaluator = ext.make_evaluator()
+lepsf_keys = lepsf_evaluator.keys()
+
+def add_muonSFs(weights, leadingmuon, year, selection):
+    def mask(w):
+        return np.where(selection.all('onemuon'), w, 1.)
+
+    yeartag = year
+    if year == '2016':
+        yeartag = '2016postVFP'
+    elif year == '2016APV':
+        yeartag = '2016preVFP'
+
+    for sf in lepsf_keys:
+
+        if yeartag not in sf:
+            continue
+        if 'muon' not in sf:
+            continue
+
+        lep_pt = np.array(ak.fill_none(leadingmuon.pt, 0.))
+        lep_eta = np.array(ak.fill_none(leadingmuon.eta, 0.))
+
+        if 'value' in sf:
+            nom = mask(lepsf_evaluator[sf](np.abs(lep_eta),lep_pt))
+            shift = mask(lepsf_evaluator[sf.replace('_value','_error')](np.abs(lep_eta),lep_pt))
+
+            weights.add(sf, nom, shift, shift=True)
+

@@ -8,7 +8,7 @@ from coffea import processor, hist
 import hist as hist2
 from coffea.analysis_tools import Weights, PackedSelection
 from coffea.lumi_tools import LumiMask
-from boostedhiggs.btag import BTagEfficiency, BTagCorrector
+from boostedhiggs.btag import BTagCorrector
 from boostedhiggs.common import (
     getBosons,
     bosonFlavor,
@@ -19,12 +19,10 @@ from boostedhiggs.corrections import (
     n2ddt_shift,
     powheg_to_nnlops,
     add_pileup_weight,
-    add_VJets_NLOkFactor,
+    add_HiggsEW_kFactors,
     add_VJets_kFactors,
-    add_jetTriggerWeight,
     add_jetTriggerSF,
-    add_mutriggerSF,
-    add_mucorrectionsSF,
+    add_muonSFs,
     jet_factory,
     fatjet_factory,
     add_jec_variables,
@@ -52,8 +50,8 @@ def update(events, collections):
 
 class VBFProcessor(processor.ProcessorABC):
     def __init__(self, year='2017', jet_arbitration='pt', tagger='v2',
-                 nnlops_rew=False, skipJER=False, tightMatch=False, newTrigger=True,
-                 newVjetsKfactor=True, ak4tagger='deepcsv',
+                 nnlops_rew=False, skipJER=False, tightMatch=False,
+                 ak4tagger='deepJet',ewkHcorr=False,systematics=True
                  ):
         self._year = year
         self._tagger  = tagger
@@ -61,23 +59,18 @@ class VBFProcessor(processor.ProcessorABC):
         self._jet_arbitration = jet_arbitration
         self._skipJER = skipJER
         self._tightMatch = tightMatch
-        self._newVjetsKfactor= newVjetsKfactor
-        self._newTrigger = newTrigger  # Fewer triggers, new maps (2017 only, ~no effect)
+        self._ewkHcorr = ewkHcorr
+        self._systematics = systematics
 
         if self._ak4tagger == 'deepcsv':
-            self._ak4tagBranch = 'btagDeepB'
-        elif self._ak4tagger == 'deepjet':
+            raise NotImplementedError()
+#            self._ak4tagBranch = 'btagDeepB'
+        elif self._ak4tagger == 'deepJet':
             self._ak4tagBranch = 'btagDeepFlavB'
         else:
             raise NotImplementedError()
 
-        self._btagSF = BTagCorrector(year, self._ak4tagger, 'medium')
-
-        self._msdSF = {
-            '2016': 1.,
-            '2017': 0.987,
-            '2018': 0.970,
-        }
+        self._btagSF = BTagCorrector('M', self._ak4tagger, year)
 
         with open('muon_triggers.json') as f:
             self._muontriggers = json.load(f)
@@ -86,80 +79,8 @@ class VBFProcessor(processor.ProcessorABC):
             self._triggers = json.load(f)
 
         # https://twiki.cern.ch/twiki/bin/view/CMS/MissingETOptionalFiltersRun2
-        self._met_filters = {
-            '2016': {
-                'data': [
-                    'goodVertices',
-                    'globalSuperTightHalo2016Filter',
-                    'HBHENoiseFilter',
-                    'HBHENoiseIsoFilter',
-                    'EcalDeadCellTriggerPrimitiveFilter',
-                    'BadPFMuonFilter',
-                    'eeBadScFilter',
-                ],
-                'mc': [
-                    'goodVertices',
-                    'globalSuperTightHalo2016Filter',
-                    'HBHENoiseFilter',
-                    'HBHENoiseIsoFilter',
-                    'EcalDeadCellTriggerPrimitiveFilter',
-                    'BadPFMuonFilter',
-                    # 'eeBadScFilter',
-                ],
-            },
-            '2017': {
-                'data': [
-                    'goodVertices',
-                    'globalSuperTightHalo2016Filter',
-                    'HBHENoiseFilter',
-                    'HBHENoiseIsoFilter',
-                    'EcalDeadCellTriggerPrimitiveFilter',
-                    'BadPFMuonFilter',
-                    'eeBadScFilter',
-                    'ecalBadCalibFilterV2',
-                ],
-                'mc': [
-                    'goodVertices',
-                    'globalSuperTightHalo2016Filter',
-                    'HBHENoiseFilter',
-                    'HBHENoiseIsoFilter',
-                    'EcalDeadCellTriggerPrimitiveFilter',
-                    'BadPFMuonFilter',
-                    #'eeBadScFilter',
-                    'ecalBadCalibFilterV2',
-                ],
-            },
-            '2018': {
-                'data': [
-                    'goodVertices',
-                    'globalSuperTightHalo2016Filter',
-                    'HBHENoiseFilter',
-                    'HBHENoiseIsoFilter',
-                    'EcalDeadCellTriggerPrimitiveFilter',
-                    'BadPFMuonFilter',
-                    'eeBadScFilter',
-                    'ecalBadCalibFilterV2',
-                ],
-                'mc': [
-                    'goodVertices',
-                    'globalSuperTightHalo2016Filter',
-                    'HBHENoiseFilter',
-                    'HBHENoiseIsoFilter',
-                    'EcalDeadCellTriggerPrimitiveFilter',
-                    'BadPFMuonFilter',
-                    #'eeBadScFilter',
-                    'ecalBadCalibFilterV2',
-                ],
-            },
-        }
-
-
-
-        self._json_paths = {
-            '2016': 'jsons/Cert_271036-284044_13TeV_23Sep2016ReReco_Collisions16_JSON.txt',
-            '2017': 'jsons/Cert_294927-306462_13TeV_EOY2017ReReco_Collisions17_JSON_v1.txt',
-            '2018': 'jsons/Cert_314472-325175_13TeV_17SeptEarlyReReco2018ABC_PromptEraD_Collisions18_JSON.txt',
-        }
+        with open('metfilters.json') as f:
+            self._met_filters = json.load(f)
 
         optbins = np.r_[np.linspace(0, 0.15, 30, endpoint=False), np.linspace(0.15, 1, 86)]
         self.make_output = lambda: {
@@ -189,23 +110,46 @@ class VBFProcessor(processor.ProcessorABC):
             # Nominal JEC are already applied in data
             return self.process_shift(events, None)
 
+        if np.sum(ak.num(events.FatJet, axis=1)) < 1:
+            return self.process_shift(events, None)
+
         jec_cache = {}
-        fatjets = fatjet_factory[f"{self._year}mc"].build(add_jec_variables(events.FatJet, events.fixedGridRhoFastjetAll), jec_cache)
-        jets = jet_factory[f"{self._year}mc"].build(add_jec_variables(events.Jet, events.fixedGridRhoFastjetAll), jec_cache)
+
+        thekey = f"{self._year}mc"
+        if self._year == "2016":
+            thekey = "2016postVFPmc"
+        elif self._year == "2016APV":
+            thekey = "2016preVFPmc"
+
+        fatjets = fatjet_factory[thekey].build(add_jec_variables(events.FatJet, events.fixedGridRhoFastjetAll), jec_cache)
+        jets = jet_factory[thekey].build(add_jec_variables(events.Jet, events.fixedGridRhoFastjetAll), jec_cache)
         met = met_factory.build(events.MET, jets, {})
 
-        shifts = [
-            ({"Jet": jets, "FatJet": fatjets, "MET": met}, None),
-            ({"Jet": jets.JES_jes.up, "FatJet": fatjets.JES_jes.up, "MET": met.JES_jes.up}, "JESUp"),
-            ({"Jet": jets.JES_jes.down, "FatJet": fatjets.JES_jes.down, "MET": met.JES_jes.down}, "JESDown"),
-            ({"Jet": jets, "FatJet": fatjets, "MET": met.MET_UnclusteredEnergy.up}, "UESUp"),
-            ({"Jet": jets, "FatJet": fatjets, "MET": met.MET_UnclusteredEnergy.down}, "UESDown"),
-            ({"Jet": jets.JER.up, "FatJet": fatjets.JER.up, "MET": met.JER.up}, "JERUp"),
-            ({"Jet": jets.JER.down, "FatJet": fatjets.JER.down, "MET": met.JER.down}, "JERDown"),
-        ]
+        shifts = [({"Jet": jets, "FatJet": fatjets, "MET": met}, None)]
+        if self._systematics:
+            if not self._skipJER:
+                shifts = [
+                    ({"Jet": jets, "FatJet": fatjets, "MET": met}, None),
+                    ({"Jet": jets.JES_jes.up, "FatJet": fatjets.JES_jes.up, "MET": met.JES_jes.up}, "JESUp"),
+                    ({"Jet": jets.JES_jes.down, "FatJet": fatjets.JES_jes.down, "MET": met.JES_jes.down}, "JESDown"),
+                    ({"Jet": jets, "FatJet": fatjets, "MET": met.MET_UnclusteredEnergy.up}, "UESUp"),
+                    ({"Jet": jets, "FatJet": fatjets, "MET": met.MET_UnclusteredEnergy.down}, "UESDown"),
+                    ({"Jet": jets.JER.up, "FatJet": fatjets.JER.up, "MET": met.JER.up}, "JERUp"),
+                    ({"Jet": jets.JER.down, "FatJet": fatjets.JER.down, "MET": met.JER.down}, "JERDown"),
+                ]
+            else:
+                shifts = [
+                    ({"Jet": jets, "FatJet": fatjets, "MET": met}, None),
+                    ({"Jet": jets.JES_jes.up, "FatJet": fatjets.JES_jes.up, "MET": met.JES_jes.up}, "JESUp"),
+                    ({"Jet": jets.JES_jes.down, "FatJet": fatjets.JES_jes.down, "MET": met.JES_jes.down}, "JESDown"),
+                    ({"Jet": jets, "FatJet": fatjets, "MET": met.MET_UnclusteredEnergy.up}, "UESUp"),
+                    ({"Jet": jets, "FatJet": fatjets, "MET": met.MET_UnclusteredEnergy.down}, "UESDown"),
+                ]
+                
         return processor.accumulate(self.process_shift(update(events, collections), name) for collections, name in shifts)
 
     def process_shift(self, events, shift_name):
+
         dataset = events.metadata['dataset']
         isRealData = not hasattr(events, "genWeight")
         isQCDMC = 'QCD' in dataset
@@ -215,7 +159,10 @@ class VBFProcessor(processor.ProcessorABC):
         if shift_name is None and not isRealData:
             output['sumw'][dataset] = ak.sum(events.genWeight)
 
-        if isRealData or self._newTrigger:
+        if len(events) == 0:
+            return output
+
+        if isRealData:
             trigger = np.zeros(len(events), dtype='bool')
             for t in self._triggers[self._year]:
                 if t in events.HLT.fields:
@@ -226,7 +173,7 @@ class VBFProcessor(processor.ProcessorABC):
             selection.add('trigger', np.ones(len(events), dtype='bool'))
 
         if isRealData:
-            selection.add('lumimask', lumiMasks[self._year](events.run, events.luminosityBlock))
+            selection.add('lumimask', lumiMasks[self._year[:4]](events.run, events.luminosityBlock))
         else:
             selection.add('lumimask', np.ones(len(events), dtype='bool'))
 
@@ -250,7 +197,6 @@ class VBFProcessor(processor.ProcessorABC):
         fatjets['msdcorr'] = corrected_msoftdrop(fatjets)
         fatjets['qcdrho'] = 2 * np.log(fatjets.msdcorr / fatjets.pt)
         fatjets['n2ddt'] = fatjets.n2b1 - n2ddt_shift(fatjets, year=self._year)
-        fatjets['msdcorr_full'] = fatjets['msdcorr'] * self._msdSF[self._year]
 
         candidatejet = fatjets[
             # https://github.com/DAZSLE/BaconAnalyzer/blob/master/Analyzer/src/VJetLoader.cc#L269
@@ -331,14 +277,14 @@ class VBFProcessor(processor.ProcessorABC):
         # only consider first 4 jets to be consistent with old framework
         jets = jets[:, :4]
         dphi = abs(jets.delta_phi(candidatejet))
-        selection.add('antiak4btagMediumOppHem', ak.max(jets[dphi > np.pi / 2].btagDeepB, axis=1, mask_identity=False) < BTagEfficiency.btagWPs[self._ak4tagger][self._year]['medium'])
+        selection.add('antiak4btagMediumOppHem', ak.max(jets[dphi > np.pi / 2].btagDeepB, axis=1, mask_identity=False) < self._btagSF._btagwp) 
         ak4_away = jets[dphi > 0.8]
-        selection.add('ak4btagMedium08', ak.max(ak4_away.btagDeepB, axis=1, mask_identity=False) > BTagEfficiency.btagWPs[self._ak4tagger][self._year]['medium'])
+        selection.add('ak4btagMedium08', ak.max(ak4_away.btagDeepB, axis=1, mask_identity=False) > self._btagSF._btagwp) 
 
         met = events.MET
         selection.add('met', met.pt < 140.)
 
-        # VBF specific variables                                                                        
+        # VBF specific variables                                                      
         dR = jets.delta_r(candidatejet)
         ak4_outside_ak8 = jets[dR > 0.8]
 
@@ -378,7 +324,6 @@ class VBFProcessor(processor.ProcessorABC):
             (
                 (events.Tau.pt > 20)
                 & (abs(events.Tau.eta) < 2.3)
-                & events.Tau.idDecayMode
                 & (events.Tau.rawIso < 5)
                 & (events.Tau.idDeepTau2017v2p1VSjet)
                 & ak.all(events.Tau.metric_table(events.Muon[goodmuon]) > 0.4, axis=2)
@@ -397,21 +342,26 @@ class VBFProcessor(processor.ProcessorABC):
         else:
             weights.add('genweight', events.genWeight)
 
-            if 'H' in dataset:
-                # Jennet adds theory variations                                                                               
-                add_ps_weight(weights, events.PSWeight)
-                if "LHEPdfWeight" in events.fields:
-                    add_pdf_weight(weights,events.LHEPdfWeight)
-                else:
-                    add_pdf_weight(weights,[])
-                if "LHEScaleWeight" in events.fields:
-                    add_scalevar_7pt(weights, events.LHEScaleWeight)
-                    add_scalevar_3pt(weights, events.LHEScaleWeight)
-                else:
-                    add_scalevar_7pt(weights,[])
-                    add_scalevar_3pt(weights,[])
+            if 'HToBB' in dataset:
 
-            add_pileup_weight(weights, events.Pileup.nPU, self._year, dataset)
+                if self._ewkHcorr:
+                    add_HiggsEW_kFactors(weights, events.GenPart, dataset)
+
+                if self._systematics:
+                    # Jennet adds theory variations                                                                               
+                    add_ps_weight(weights, events.PSWeight)
+                    if "LHEPdfWeight" in events.fields:
+                        add_pdf_weight(weights,events.LHEPdfWeight)
+                    else:
+                        add_pdf_weight(weights,[])
+                    if "LHEScaleWeight" in events.fields:
+                        add_scalevar_7pt(weights, events.LHEScaleWeight)
+                        add_scalevar_3pt(weights, events.LHEScaleWeight)
+                    else:
+                        add_scalevar_7pt(weights,[])
+                        add_scalevar_3pt(weights,[])
+
+            add_pileup_weight(weights, events.Pileup.nPU, self._year)
             bosons = getBosons(events.GenPart)
             matchedBoson = candidatejet.nearest(bosons, axis=None, threshold=0.8)
             if self._tightMatch:
@@ -421,29 +371,21 @@ class VBFProcessor(processor.ProcessorABC):
             else:
                 genflavor = bosonFlavor(matchedBoson)
             genBosonPt = ak.fill_none(ak.firsts(bosons.pt), 0)
-            if self._newVjetsKfactor:
-                add_VJets_kFactors(weights, events.GenPart, dataset)
-            else:
-                add_VJets_NLOkFactor(weights, genBosonPt, self._year, dataset)
+            add_VJets_kFactors(weights, events.GenPart, dataset)
 
             if shift_name is None:
-                output['btagWeight'].fill(val=self._btagSF.addBtagWeight(weights, ak4_away, self._ak4tagBranch))
+                output['btagWeight'].fill(val=self._btagSF.addBtagWeight(ak4_away, weights))
 
-            if self._newTrigger:
-                add_jetTriggerSF(weights, ak.firsts(fatjets), self._year, selection)
-            else:
-                add_jetTriggerWeight(weights, candidatejet.msdcorr, candidatejet.pt, self._year)
+            add_jetTriggerSF(weights, ak.firsts(fatjets), self._year, selection)
 
-            add_mutriggerSF(weights, leadingmuon, self._year, selection)
-            add_mucorrectionsSF(weights, leadingmuon, self._year, selection)
+            add_muonSFs(weights, leadingmuon, self._year, selection)
 
-            if self._year in ("2016", "2017"):
+            if self._year in ("2016APV", "2016", "2017"):
                 weights.add("L1Prefiring", events.L1PreFiringWeight.Nom, events.L1PreFiringWeight.Up, events.L1PreFiringWeight.Dn)
-
 
             logger.debug("Weight statistics: %r" % weights.weightStatistics)
 
-        msd_matched = candidatejet.msdcorr * self._msdSF[self._year] * (genflavor > 0) + candidatejet.msdcorr * (genflavor == 0)
+        msd_matched = candidatejet.msdcorr * (genflavor > 0) + candidatejet.msdcorr * (genflavor == 0)
 
         regions = {
             'signal-ggf': ['trigger','lumimask','metfilter','minjetkin','jetid','n2ddt','antiak4btagMediumOppHem','met','noleptons','notvbf'],
