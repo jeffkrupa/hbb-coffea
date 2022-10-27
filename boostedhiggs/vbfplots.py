@@ -98,6 +98,7 @@ class VBFPlotProcessor(processor.ProcessorABC):
                 'Events',
                 hist.Cat('dataset', 'Dataset'),
                 hist.Cat('region', 'Region'),
+                hist.Bin('msd1', r'Jet $m_{sd}$ [GeV]',23,40,201),
                 hist.Bin('pt1', r'Jet $p_T$ [GeV]',30,450,1200),
                 hist.Bin('eta1', r'Jet $eta$',20,0,5),
                 hist.Bin('ddb1', r'Jet ddb score', 25,0,1),
@@ -440,6 +441,7 @@ class VBFPlotProcessor(processor.ProcessorABC):
                 output['fatjetkin'].fill(
                    dataset=dataset,
                     region=region,
+                    msd1=normalize(msdcorr,cut),
                     pt1=normalize(candidatejet.pt,cut),
                     eta1=normalize(abs(candidatejet.eta),cut),
                     ddb1=normalize(bvl, cut),

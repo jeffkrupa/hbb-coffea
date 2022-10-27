@@ -108,7 +108,6 @@ folders_to_index = [
     #	"/store/user/lpcpfnano/jkrupa/v2_2/2017/VectorZPrime",
     #	"/store/user/lpcpfnano/dryu/v2_2/2018/VectorZPrime",
 
-
     "/store/group/lpcpfnano/jdickins/v2_2/2016APV/Diboson",
     "/store/group/lpcpfnano/jdickins/v2_2/2016/Diboson",
     "/store/group/lpcpfnano/jdickins/v2_2/2017/Diboson",
