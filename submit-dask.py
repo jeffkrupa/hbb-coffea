@@ -24,8 +24,8 @@ cluster = LPCCondorCluster(
     shared_temp_directory="/tmp",
     transfer_input_files=["boostedhiggs"],
     ship_env=True,
-    memory="16GB",
-    image="coffeateam/coffea-dask:0.7.16-fastjet-3.3.4.0rc9-gc4ca259"
+    memory="20GB",
+    image="coffeateam/coffea-dask:0.7.20-fastjet-3.4.0.1-g4cab023"
 )
 
 if not os.path.isdir('outfiles/'):
