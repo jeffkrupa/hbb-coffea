@@ -6,6 +6,7 @@ from .vbftruth import VBFTruthProcessor
 from .vhbbprocessor import VHbbProcessor
 from .tauveto import TauVetoProcessor
 from .vbfstxs import VBFSTXSProcessor
+from .vbfarray import VBFArrayProcessor
 from .btag import BTagEfficiency
 
 __all__ = [
@@ -18,4 +19,5 @@ __all__ = [
     'VHbbProcessor',
     'BTagEfficiency'
     'TauVetoProcessor',
+    'VBFArrayProcessor'
 ]

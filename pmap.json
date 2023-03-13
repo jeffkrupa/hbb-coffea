@@ -24,10 +24,6 @@
         "TTToHadronic",
         "TTToSemiLeptonic_ext1"
     ],
-    "ttbarBoosted": [
-        "TT_MTT700To1000",
-        "TT_MTT1000ToInf"
-    ],
     "singlet": [
         "ST_t-channel_antitop_4f_InclusiveDecays",
         "ST_t-channel_top_4f_InclusiveDecays",

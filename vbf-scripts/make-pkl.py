@@ -56,6 +56,8 @@ def main():
 
     scale_lumi = {k: xs[k] * 1000 * lumis[year] / w for k, w in outsum['sumw'].items()} 
 
+    print(outsum['sumw'].keys())
+
     outsum['templates'].scale(scale_lumi, 'dataset')
 
     print(outsum['templates'].identifiers('dataset'))

@@ -63,6 +63,13 @@ folders_to_index = [
     "/store/user/lpcpfnano/yihan/v2_2/2017/TTbar",
     "/store/user/lpcpfnano/yihan/v2_2/2018/TTbar",
 
+    # HT sliced QCD
+    "/store/user/lpcpfnano/cmantill/v2_3/2016/QCD",
+    "/store/user/lpcpfnano/cmantill/v2_3/2016APV/QCD",
+    "/store/user/lpcpfnano/cmantill/v2_3/2017/QCD",
+    "/store/user/lpcpfnano/cmantill/v2_3/2018/QCD",
+
+    # PT sliced QCD
     "/store/user/lpcpfnano/yihan/v2_2/2016/QCD",
     "/store/user/lpcpfnano/yihan/v2_2/2016APV/QCD",
     "/store/user/lpcpfnano/jekrupa/v2_2/2017/QCD",

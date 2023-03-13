@@ -1,9 +1,6 @@
 import logging
 import numpy as np
 import awkward as ak
-import pandas as pd
-import pyarrow as pa
-import pyarrow.parquet as pq
 import os
 import json
 import copy
@@ -22,6 +19,7 @@ from boostedhiggs.corrections import (
     corrected_msoftdrop,
     n2ddt_shift,
     powheg_to_nnlops,
+    add_HiggsEW_kFactors,
     add_pileup_weight,
     add_VJets_kFactors,
     add_jetTriggerSF,
@@ -33,7 +31,6 @@ from boostedhiggs.corrections import (
     lumiMasks,
 )
 
-
 logger = logging.getLogger(__name__)
 
 def update(events, collections):
@@ -43,29 +40,10 @@ def update(events, collections):
         out = ak.with_field(out, value, name)
     return out
 
-def pad_val(
-    arr: ak.Array,
-    value: float,
-    target: int = None,
-    axis: int = 0,
-    to_numpy: bool = False,
-    clip: bool = True):
-    """
-    pads awkward array up to ``target`` index along axis ``axis`` with value ``value``,
-    optionally converts to numpy array
-    """
-    if target:
-        ret = ak.fill_none(ak.pad_none(arr, target, axis=axis, clip=clip), value, axis=None)
-    else:
-        ret = ak.fill_none(arr, value, axis=None)
-    return ret.to_numpy() if to_numpy else ret
-
 class VBFArrayProcessor(processor.ProcessorABC):
     def __init__(self, year='2017', jet_arbitration='pt', tagger='v2',
                  nnlops_rew=False, skipJER=False, tightMatch=False,
                  ak4tagger='deepJet'):
-
-        self._output_location = 'outfiles-array/'
 
         self._year = year
         self._tagger  = tagger
@@ -93,23 +71,50 @@ class VBFArrayProcessor(processor.ProcessorABC):
         with open('metfilters.json') as f:
             self._met_filters = json.load(f)
 
-    def save_dfs_parquet(self, fname, dfs_dict):
-        if self._output_location is not None:
-            table = pa.Table.from_pandas(dfs_dict)
-            if len(table) != 0:  # skip dataframes with empty entries                                                                           
-                pq.write_table(table, self._output_location + "/parquet/" + fname + ".parquet")
-
-    def ak_to_pandas(self, output_collection: ak.Array) -> pd.DataFrame:
-        output = pd.DataFrame()
-        for field in ak.fields(output_collection):
-            output[field] = ak.to_numpy(output_collection[field])
-        return output
+        self.make_output = lambda: {
+            'sumw': 0.,
+            'btagWeight': hist2.Hist(
+                hist2.axis.Regular(50, 0, 3, name='val', label='BTag correction'),
+                hist2.storage.Weight(),
+            ),
+            'genflavor': processor.column_accumulator(np.zeros(shape=(0,))),
+            'pt': processor.column_accumulator(np.zeros(shape=(0,))),
+            'eta': processor.column_accumulator(np.zeros(shape=(0,))),
+            'phi': processor.column_accumulator(np.zeros(shape=(0,))),
+            'n2ddt': processor.column_accumulator(np.zeros(shape=(0,))),
+            'msd': processor.column_accumulator(np.zeros(shape=(0,))),
+            'ddb': processor.column_accumulator(np.zeros(shape=(0,))),
+            'deta': processor.column_accumulator(np.zeros(shape=(0,))),
+            'dphi': processor.column_accumulator(np.zeros(shape=(0,))),
+            'mjj': processor.column_accumulator(np.zeros(shape=(0,))),
+            'subjet1_pt':processor.column_accumulator(np.zeros(shape=(0,))),
+            'subjet1_eta':processor.column_accumulator(np.zeros(shape=(0,))),
+            'subjet1_phi':processor.column_accumulator(np.zeros(shape=(0,))),
+            'subjet2_pt':processor.column_accumulator(np.zeros(shape=(0,))),
+            'subjet2_eta':processor.column_accumulator(np.zeros(shape=(0,))),
+            'subjet2_phi':processor.column_accumulator(np.zeros(shape=(0,))),
+            'njets': processor.column_accumulator(np.zeros(shape=(0,))),
+            'jet1_pt': processor.column_accumulator(np.zeros(shape=(0,))),
+            'jet1_eta': processor.column_accumulator(np.zeros(shape=(0,))),
+            'jet1_phi': processor.column_accumulator(np.zeros(shape=(0,))),
+            'jet1_qgl': processor.column_accumulator(np.zeros(shape=(0,))),
+            'jet2_pt': processor.column_accumulator(np.zeros(shape=(0,))),
+            'jet2_eta': processor.column_accumulator(np.zeros(shape=(0,))),
+            'jet2_phi': processor.column_accumulator(np.zeros(shape=(0,))),
+            'jet2_qgl': processor.column_accumulator(np.zeros(shape=(0,))),
+            'jet3_pt': processor.column_accumulator(np.zeros(shape=(0,))),
+            'jet3_eta': processor.column_accumulator(np.zeros(shape=(0,))),
+            'jet3_phi': processor.column_accumulator(np.zeros(shape=(0,))),
+            'jet3_qgl': processor.column_accumulator(np.zeros(shape=(0,))),
+            'weight': processor.column_accumulator(np.zeros(shape=(0,)))
+        }
 
     def process(self, events):
         isRealData = not hasattr(events, "genWeight")
+        isQCDMC = 'QCD' in events.metadata['dataset']
 
-        if isRealData:
-            # Nominal JEC are already applied in data
+        if isRealData or isQCDMC:
+            # Nominal JEC are already applied in data                                                                        
             return self.process_shift(events, None)
 
         if np.sum(ak.num(events.FatJet, axis=1)) < 1:
@@ -136,14 +141,15 @@ class VBFArrayProcessor(processor.ProcessorABC):
         dataset = events.metadata['dataset']
         isRealData = not hasattr(events, "genWeight")
         selection = PackedSelection()
-        output = {dataset : processor.dict_accumulator()}
-        weights = Weights(len(events), storeIndividual=True)
 
+        output = self.make_output()
         if shift_name is None and not isRealData:
-            output[dataset]['sumw'] = ak.sum(events.genWeight)
+            output['sumw'] = ak.sum(events.genWeight)
 
-#        if len(events) == 0:
-#            return output
+        if len(events) == 0:
+            return output
+
+        weights = Weights(len(events), storeIndividual=True)
 
         if isRealData:
             trigger = np.zeros(len(events), dtype='bool')
@@ -187,6 +193,12 @@ class VBFArrayProcessor(processor.ProcessorABC):
             & (abs(fatjets.eta) < 2.5)
             & fatjets.isTight  # this is loose in sampleContainer
         ]
+
+#        subjets = events.SubJet[
+#            (fatjets.pt > 200)
+#            & (abs(fatjets.eta) < 2.5)
+#            & fatjets.isTight
+#        ]
 
         candidatejet = candidatejet[:, :2]  # Only consider first two to match generators
         if self._jet_arbitration == 'pt':
@@ -242,6 +254,17 @@ class VBFArrayProcessor(processor.ProcessorABC):
         else:
             selection.add('ddbpass', (bvl >= 0.64))
 
+#        subjet1 = subjets[:,candidatejet.subJetIdx1]
+#        subjet2 = subjets[:,candidatejet.subJetIdx2]
+
+#        subjet1_pt = ak.firsts(subjet1).pt
+#        subjet1_eta = ak.firsts(subjet1).eta
+#        subjet1_phi = ak.firsts(subjet1).phi
+
+#        subjet2_pt = ak.firsts(subjet2).pt
+#        subjet2_eta = ak.firsts(subjet2).eta
+#        subjet2_phi = ak.firsts(subjet2).phi
+
         jets = events.Jet
         jets = jets[
             (jets.pt > 30.)
@@ -271,8 +294,23 @@ class VBFArrayProcessor(processor.ProcessorABC):
         dR = jets.delta_r(candidatejet)
         ak4_outside_ak8 = jets[dR > 0.8]
 
+        njets = ak.num(ak4_outside_ak8)
+
         jet1 = ak4_outside_ak8[:, 0:1]
         jet2 = ak4_outside_ak8[:, 1:2]
+        jet3 = ak4_outside_ak8[:, 2:3]
+
+        jet1_pt = ak.firsts(jet1).pt
+        jet1_eta = ak.firsts(jet1).eta
+        jet1_phi = ak.firsts(jet1).phi
+
+        jet2_pt = ak.firsts(jet2).pt
+        jet2_eta = ak.firsts(jet2).eta
+        jet2_phi = ak.firsts(jet2).phi
+
+        jet3_pt = ak.firsts(jet3).pt
+        jet3_eta = ak.firsts(jet3).eta
+        jet3_phi = ak.firsts(jet3).phi
 
         deta = abs(ak.firsts(jet1).eta - ak.firsts(jet2).eta)
         dphi = (ak.firsts(jet1)).delta_phi(ak.firsts(jet2))
@@ -280,6 +318,7 @@ class VBFArrayProcessor(processor.ProcessorABC):
 
         qgl1 = ak.firsts(jet1.qgl)
         qgl2 = ak.firsts(jet2.qgl)
+        qgl3 = ak.firsts(jet3.qgl)
 
         isvbf = ((deta > 3.5) & (mjj > 1000))
         isvbf = ak.fill_none(isvbf,False)
@@ -326,6 +365,9 @@ class VBFArrayProcessor(processor.ProcessorABC):
         else:
             weights.add('genweight', events.genWeight)
 
+            if 'HToBB' in dataset:
+                add_HiggsEW_kFactors(weights, events.GenPart, dataset)
+
             add_pileup_weight(weights, events.Pileup.nPU, self._year)
             bosons = getBosons(events.GenPart)
             matchedBoson = candidatejet.nearest(bosons, axis=None, threshold=0.8)
@@ -338,13 +380,15 @@ class VBFArrayProcessor(processor.ProcessorABC):
             genBosonPt = ak.fill_none(ak.firsts(bosons.pt), 0)
             add_VJets_kFactors(weights, events.GenPart, dataset)
 
+            if shift_name is None:
+                output['btagWeight'].fill(val=self._btagSF.addBtagWeight(ak4_away, weights))
+
             add_jetTriggerSF(weights, ak.firsts(fatjets), self._year, selection)
 
             add_muonSFs(weights, leadingmuon, self._year, selection)
 
             if self._year in ("2016APV", "2016", "2017"):
                 weights.add("L1Prefiring", events.L1PreFiringWeight.Nom, events.L1PreFiringWeight.Up, events.L1PreFiringWeight.Dn)
-
 
             logger.debug("Weight statistics: %r" % weights.weightStatistics)
 
@@ -353,12 +397,7 @@ class VBFArrayProcessor(processor.ProcessorABC):
         regions = {
             'signal-ggf': ['trigger','lumimask','metfilter','minjetkin','jetid','n2ddt','antiak4btagMediumOppHem','met','noleptons','notvbf'],
             'signal-vbf': ['trigger','lumimask','metfilter','minjetkin','jetid','n2ddt','antiak4btagMediumOppHem','met','noleptons','isvbf'],
-            'muoncontrol': ['muontrigger','lumimask','metfilter','minjetkinmu', 'jetid', 'n2ddt', 'ak4btagMedium08', 'onemuon', 'muonkin', 'muonDphiAK8'],
-            'noselection': [],
         }
-
-        for k in ['genflavor','pt','n2ddt','msd','ddb','deta','dphi','mjj','weight']:
-            output[dataset][k] = processor.column_accumulator(np.zeros(shape=(0,)))
 
         def normalize(val, cut):
             if cut is None:
@@ -366,20 +405,41 @@ class VBFArrayProcessor(processor.ProcessorABC):
                 return ar
             else:
                 ar = ak.to_numpy(ak.fill_none(val[cut], np.nan))
-            return ar
-
+                return ar
+        
         vbfcuts = selection.all(*regions['signal-vbf'])
-        output[dataset]['genflavor'] += processor.column_accumulator(normalize(genflavor,vbfcuts))
-        output[dataset]['pt'] += processor.column_accumulator(normalize(candidatejet.pt,vbfcuts))
-        output[dataset]['n2ddt'] += processor.column_accumulator(normalize(candidatejet.n2ddt,vbfcuts))
-        output[dataset]['msd'] += processor.column_accumulator(normalize(msd_matched,vbfcuts))
-        output[dataset]['ddb'] += processor.column_accumulator(normalize(bvl,vbfcuts))
-        output[dataset]['deta'] += processor.column_accumulator(normalize(deta,vbfcuts))
-        output[dataset]['dphi'] += processor.column_accumulator(normalize(dphi,vbfcuts))
-        output[dataset]['mjj'] += processor.column_accumulator(normalize(mjj,vbfcuts))
-        output[dataset]['weight'] += processor.column_accumulator(normalize(weights.weight(),vbfcuts))
+        output['genflavor'] += processor.column_accumulator(normalize(genflavor,vbfcuts))
+        output['pt'] += processor.column_accumulator(normalize(candidatejet.pt,vbfcuts))
+        output['eta'] += processor.column_accumulator(normalize(candidatejet.eta,vbfcuts))
+        output['phi'] += processor.column_accumulator(normalize(candidatejet.phi,vbfcuts))
+        output['n2ddt'] += processor.column_accumulator(normalize(candidatejet.n2ddt,vbfcuts))
+        output['msd'] += processor.column_accumulator(normalize(msd_matched,vbfcuts))
+        output['ddb'] += processor.column_accumulator(normalize(bvl,vbfcuts))
+        output['deta'] += processor.column_accumulator(normalize(deta,vbfcuts))
+        output['dphi'] += processor.column_accumulator(normalize(dphi,vbfcuts))
+        output['mjj'] += processor.column_accumulator(normalize(mjj,vbfcuts))
+        output['njets'] += processor.column_accumulator(normalize(njets,vbfcuts))
+        output['jet1_pt'] += processor.column_accumulator(normalize(jet1_pt,vbfcuts))
+        output['jet1_eta'] += processor.column_accumulator(normalize(jet1_eta,vbfcuts))
+        output['jet1_phi'] += processor.column_accumulator(normalize(jet1_phi,vbfcuts))
+        output['jet1_qgl'] += processor.column_accumulator(normalize(qgl1,vbfcuts))
+        output['jet2_pt'] += processor.column_accumulator(normalize(jet2_pt,vbfcuts))
+        output['jet2_eta'] += processor.column_accumulator(normalize(jet2_eta,vbfcuts))
+        output['jet2_phi'] += processor.column_accumulator(normalize(jet2_phi,vbfcuts))
+        output['jet2_qgl'] += processor.column_accumulator(normalize(qgl2,vbfcuts))
+        output['jet3_pt'] += processor.column_accumulator(normalize(jet3_pt,vbfcuts))
+        output['jet3_eta'] += processor.column_accumulator(normalize(jet3_eta,vbfcuts))
+        output['jet3_phi'] += processor.column_accumulator(normalize(jet3_phi,vbfcuts))
+        output['jet3_qgl'] += processor.column_accumulator(normalize(qgl3,vbfcuts))
+#        output['subjet1_pt'] += processor.column_accumulator(normalize(subjet1_pt,vbfcuts))
+#        output['subjet1_eta'] += processor.column_accumulator(normalize(subjet1_eta,vbfcuts))
+#        output['subjet1_phi'] += processor.column_accumulator(normalize(subjet1_phi,vbfcuts))
+#        output['subjet2_pt'] += processor.column_accumulator(normalize(subjet2_pt,vbfcuts))
+#        output['subjet2_eta'] += processor.column_accumulator(normalize(subjet2_eta,vbfcuts))
+#        output['subjet2_phi'] += processor.column_accumulator(normalize(subjet2_phi,vbfcuts))
+        output['weight'] += processor.column_accumulator(normalize(weights.weight(),vbfcuts))
 
-        return output
+        return {dataset: output}
 
     def postprocess(self, accumulator):
         return accumulator

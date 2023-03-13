@@ -11,8 +11,12 @@ from boostedhiggs import VBFPlotProcessor
 from distributed import Client
 from lpcjobqueue import LPCCondorCluster
 
+import dask
 from dask.distributed import performance_report
 from dask_jobqueue import HTCondorCluster, SLURMCluster
+
+# memory issue fixed by this?
+dask.config.set({"distributed.nanny.environ.MALLOC_TRIM_THRESHOLD_": "65536"})
 
 from datetime import datetime
 
@@ -21,10 +25,11 @@ env_extra = [
 ]
 
 cluster = LPCCondorCluster(
+#    shared_temp_directory="/tmp",
     transfer_input_files=["boostedhiggs"],
     ship_env=True,
-    memory="8GB",
-#    image="coffeateam/coffea-dask:0.7.11-fastjet-3.3.4.0rc9-ga05a1f8",
+    memory="12GB",
+    image="coffeateam/coffea-dask:0.7.20-fastjet-3.4.0.1-g4cab023"
 )
 
 if not os.path.isdir('outfiles-plots/'):
@@ -49,9 +54,9 @@ with Client(cluster) as client:
             index = this_file.split("_")[1].split(".json")[0]
             outfile = 'outfiles-plots/'+str(year)+'_dask_'+index+'.coffea'
 
-            if 'JetHT' not in index:
+            if 'QCD' not in index and 'JetHT' not in index:
                 continue
-            
+
             if os.path.isfile(outfile):
                 print("File " + outfile + " already exists. Skipping.")
                 continue
@@ -75,7 +80,7 @@ with Client(cluster) as client:
                     "schema": processor.NanoAODSchema,
                     "treereduction": 2,
                 },
-                chunksize=100000,
+                chunksize=50000,
                 #        maxchunks=args.max,
             )
 

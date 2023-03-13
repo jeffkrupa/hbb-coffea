@@ -26,7 +26,7 @@ def main():
 
     year = sys.argv[1]
 
-    samples = ['data','muondata','QCD','ttbar','singlet','VV','EWKW','EWKZ','ggF','VBF','WH','ZH','ttH']
+    samples = ['data','muondata','QCD','ttbar','singlet','VV']
 
     print("MUON CR")
     if os.path.isfile(year+'/muonCR.root'):

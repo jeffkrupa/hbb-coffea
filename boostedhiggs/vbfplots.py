@@ -75,34 +75,34 @@ class VBFPlotProcessor(processor.ProcessorABC):
         optbins = np.r_[np.linspace(0, 0.15, 30, endpoint=False), np.linspace(0.15, 1, 86)]
         self.make_output = lambda: {
             'sumw': processor.defaultdict_accumulator(float),
-            'cutflow': hist.Hist(
-                'Events',
-                hist.Cat('dataset', 'Dataset'),
-                hist.Cat('region', 'Region'),
-                hist.Bin('genflavor', 'Gen. jet flavor', [0, 1, 2, 3, 4]),
-                hist.Bin('cut', 'Cut index', 15, 0, 15),
-            ),
+#            'cutflow': hist.Hist(
+#                'Events',
+#                hist.Cat('dataset', 'Dataset'),
+#                hist.Cat('region', 'Region'),
+#                hist.Bin('genflavor', 'Gen. jet flavor', [0, 1, 2, 3, 4]),
+#                hist.Bin('cut', 'Cut index', 15, 0, 15),
+#            ),
             'btagWeight': hist2.Hist(
                 hist2.axis.Regular(50, 0, 3, name='val', label='BTag correction'),
                 hist2.storage.Weight(),
             ),
-            'muonkin': hist.Hist(
-                'Events',
-                hist.Cat('dataset', 'Dataset'),
-                hist.Cat('region', 'Region'),
-                hist.Bin('ptmu',r'Muon $p_{T}$ [GeV]',50,0,500),
-                hist.Bin('etamu',r'Muon $\eta$',20,0,5),
-                hist.Bin('ddb1', r'Jet ddb score', [0, 0.64, 1]),
-            ),
+#            'muonkin': hist.Hist(
+#                'Events',
+#                hist.Cat('dataset', 'Dataset'),
+#                hist.Cat('region', 'Region'),
+#                hist.Bin('ptmu',r'Muon $p_{T}$ [GeV]',50,0,500),
+#                hist.Bin('etamu',r'Muon $\eta$',20,0,5),
+#                hist.Bin('ddb1', r'Jet ddb score', [0, 0.64, 1]),
+#            ),
             'fatjetkin': hist.Hist(
                 'Events',
                 hist.Cat('dataset', 'Dataset'),
                 hist.Cat('region', 'Region'),
                 hist.Bin('msd1', r'Jet $m_{sd}$ [GeV]',23,40,201),
                 hist.Bin('pt1', r'Jet $p_T$ [GeV]',30,450,1200),
-                hist.Bin('eta1', r'Jet $eta$',20,0,5),
+#                hist.Bin('eta1', r'Jet $eta$',20,0,5),
                 hist.Bin('ddb1', r'Jet ddb score', 25,0,1),
-                hist.Bin('n2ddt1',r'Jet N2DDT',25,-0.5,0)
+#                hist.Bin('n2ddt1',r'Jet N2DDT',25,-0.5,0)
             ),
             'smalljetkin': hist.Hist(
                 'Events',
@@ -113,19 +113,23 @@ class VBFPlotProcessor(processor.ProcessorABC):
                 hist.Bin('mjj',  r'$m_{jj}$ [GeV]',50,0,10000),
                 hist.Bin('ddb1', r'Jet ddb score', [0, 0.64, 1])
             ),
-            'smalljetflav': hist.Hist(
+#            'smalljetflav': hist.Hist(
+#                'Events',
+#                hist.Cat('dataset', 'Dataset'),
+#                hist.Cat('region', 'Region'),
+#                hist.Bin('qgl1', r'Jet 1 QGL',25,0,1),
+#                hist.Bin('qgl2', r'Jet 2 QGL',25,0,1),
+#                hist.Bin('ddb1', r'Jet ddb score', [0, 0.64, 1])
+#            ),
+            'njets': hist.Hist(
                 'Events',
                 hist.Cat('dataset', 'Dataset'),
                 hist.Cat('region', 'Region'),
-                hist.Bin('qgl1', r'Jet 1 QGL',25,0,1),
-                hist.Bin('qgl2', r'Jet 2 QGL',25,0,1),
+#                hist.Bin('met', r'MET',50,0,500),
+                hist.Bin('pt1', r'Jet $p_T$ [GeV]',30,450,1200),
+                hist.Bin('msd1', r'Jet $m_{sd}$ [GeV]',23,40,201),
+                hist.Bin('njets',r'AK4 jet multiplicity',[0, 1, 2, 3, 4]),
                 hist.Bin('ddb1', r'Jet ddb score', [0, 0.64, 1])
-            ),
-            'met': hist.Hist(
-                'Events',
-                hist.Cat('dataset', 'Dataset'),
-                hist.Cat('region', 'Region'),
-                hist.Bin('met', r'MET',50,0,500)
             ),
         }
 
@@ -267,7 +271,7 @@ class VBFPlotProcessor(processor.ProcessorABC):
 
         jets = events.Jet
         jets = jets[
-            (jets.pt > 30.)
+            (jets.pt > 25.)
             & (abs(jets.eta) < 5.0)
             & jets.isTight
             & (jets.puId > 0)
@@ -293,6 +297,8 @@ class VBFPlotProcessor(processor.ProcessorABC):
         # VBF specific variables
         dR = jets.delta_r(candidatejet)
         ak4_outside_ak8 = jets[dR > 0.8]
+
+        njets = ak.num(ak4_outside_ak8)
 
         jet1 = ak4_outside_ak8[:, 0:1]
         jet2 = ak4_outside_ak8[:, 1:2]
@@ -379,7 +385,7 @@ class VBFPlotProcessor(processor.ProcessorABC):
         regions = {
             'signal-ggf': ['trigger','lumimask','metfilter','minjetkin','jetid','n2ddt','antiak4btagMediumOppHem','met','noleptons','notvbf'],
             'signal-vbf': ['trigger','lumimask','metfilter','minjetkin','jetid','n2ddt','antiak4btagMediumOppHem','met','noleptons','isvbf'],
-            'muoncontrol': ['muontrigger','lumimask','metfilter','minjetkinmu', 'jetid', 'n2ddt', 'ak4btagMedium08', 'onemuon', 'muonkin', 'muonDphiAK8'],
+            'muoncontrol': ['muontrigger','lumimask','metfilter','minjetkinmu', 'n2ddt','jetid', 'ak4btagMedium08', 'onemuon', 'muonkin', 'muonDphiAK8'],
             'noselection': [],
         }
 
@@ -397,19 +403,21 @@ class VBFPlotProcessor(processor.ProcessorABC):
             for region, cuts in regions.items():
                 allcuts = set([])
                 cut = selection.all(*allcuts)
-                output['cutflow'].fill(dataset=dataset,
-                                       region=region,
-                                       genflavor=normalize(genflavor, None),
-                                       cut=0,
-                                       weight=weights.weight())
-                for i, cut in enumerate(cuts + ['ddbpass']):
-                    allcuts.add(cut)
-                    cut = selection.all(*allcuts)
-                    output['cutflow'].fill(dataset=dataset,
-                                           region=region,
-                                           genflavor=normalize(genflavor, cut),
-                                           cut=i + 1,
-                                           weight=weights.weight()[cut])
+#                output['cutflow'].fill(dataset=dataset,
+#                                       region=region,
+#                                       msd1=normalize(msd_matched,cut),
+#                                       genflavor=normalize(genflavor, None),
+#                                       cut=0,
+#                                       weight=weights.weight())
+#                for i, cut in enumerate(cuts + ['ddbpass']):
+#                    allcuts.add(cut)
+#                    cut = selection.all(*allcuts)
+#                    output['cutflow'].fill(dataset=dataset,
+#                                           region=region,
+#                                           genflavor=normalize(genflavor, cut),
+#                                           msd1=normalize(msd_matched,cut),
+#                                           cut=i + 1,
+#                                           weight=weights.weight()[cut])
 
         if shift_name is None:
             systematics = [None] + list(weights.variations)
@@ -430,22 +438,22 @@ class VBFPlotProcessor(processor.ProcessorABC):
 
             if sname == "nominal":
 
-                output['muonkin'].fill(
+#                output['muonkin'].fill(
+#                    dataset=dataset,
+#                    region=region,
+#                    ptmu=normalize(leadingmuon.pt, cut),
+#                    etamu=normalize(abs(leadingmuon.eta),cut),
+#                    ddb1=normalize(bvl, cut),
+#                    weight=weight,
+#                )
+                output['fatjetkin'].fill(
                     dataset=dataset,
                     region=region,
-                    ptmu=normalize(leadingmuon.pt, cut),
-                    etamu=normalize(abs(leadingmuon.eta),cut),
-                    ddb1=normalize(bvl, cut),
-                    weight=weight,
-                )
-                output['fatjetkin'].fill(
-                   dataset=dataset,
-                    region=region,
-                    msd1=normalize(msdcorr,cut),
+                    msd1=normalize(msd_matched,cut),
                     pt1=normalize(candidatejet.pt,cut),
-                    eta1=normalize(abs(candidatejet.eta),cut),
+#                    eta1=normalize(abs(candidatejet.eta),cut),
                     ddb1=normalize(bvl, cut),
-                    n2ddt1=normalize(candidatejet.n2ddt,cut),
+#                    n2ddt1=normalize(candidatejet.n2ddt,cut),
                     weight=weight,
                 )
                 output['smalljetkin'].fill(
@@ -457,18 +465,21 @@ class VBFPlotProcessor(processor.ProcessorABC):
                     ddb1=normalize(bvl, cut),
                     weight=weight,
                 )
-                output['smalljetflav'].fill(
+#                output['smalljetflav'].fill(
+#                    dataset=dataset,
+#                    region=region,
+#                    qgl1=normalize(qgl1,cut),
+#                    qgl2=normalize(qgl2,cut),
+#                    ddb1=normalize(bvl, cut),
+#                    weight=weight,
+#                )
+                output['njets'].fill(
                     dataset=dataset,
                     region=region,
-                    qgl1=normalize(qgl1,cut),
-                    qgl2=normalize(qgl2,cut),
-                    ddb1=normalize(bvl, cut),
-                    weight=weight,
-                )
-                output['met'].fill(
-                    dataset=dataset,
-                    region=region,
-                    met=normalize(met.pt,cut),
+                    pt1=normalize(candidatejet.pt,cut),
+                    msd1=normalize(msd_matched,cut),
+                    njets=normalize(njets,cut),
+                    ddb1=normalize(bvl,cut),
                     weight=weight,
                 )
 

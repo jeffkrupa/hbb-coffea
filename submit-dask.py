@@ -20,7 +20,13 @@ env_extra = [
     f"export PYTHONPATH=$PYTHONPATH:{os.getcwd()}",
 ]
 
+#dask.config.set({"distributed.worker.profile.interval": "2d"})
+
 cluster = LPCCondorCluster(
+    job_script_prologue=[
+        "export DASK_DISTRIBUTED__WORKER__PROFILE__INTERVAL=1d",
+        "export DASK_DISTRIBUTED__WORKER__PROFILE__CYCLE=2d",
+    ],
     shared_temp_directory="/tmp",
     transfer_input_files=["boostedhiggs"],
     ship_env=True,
@@ -50,6 +56,9 @@ with Client(cluster) as client:
             index = this_file.split("_")[1].split(".json")[0]
             outfile = 'outfiles/'+str(year)+'_dask_'+index+'.coffea'
             
+            if 'JetHTData' not in index:
+                continue
+
             if os.path.isfile(outfile):
                 print("File " + outfile + " already exists. Skipping.")
                 continue
