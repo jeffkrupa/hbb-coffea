@@ -30,8 +30,8 @@ cluster = LPCCondorCluster(
     shared_temp_directory="/tmp",
     transfer_input_files=["boostedhiggs"],
     ship_env=True,
-    memory="20GB",
-    image="coffeateam/coffea-dask:0.7.20-fastjet-3.4.0.1-g4cab023"
+    memory="4GB",
+#    image="coffeateam/coffea-dask:0.7.20-fastjet-3.4.0.1-g4cab023"
 )
 
 if not os.path.isdir('outfiles/'):
@@ -56,9 +56,6 @@ with Client(cluster) as client:
             index = this_file.split("_")[1].split(".json")[0]
             outfile = 'outfiles/'+str(year)+'_dask_'+index+'.coffea'
             
-            if 'JetHTData' not in index:
-                continue
-
             if os.path.isfile(outfile):
                 print("File " + outfile + " already exists. Skipping.")
                 continue

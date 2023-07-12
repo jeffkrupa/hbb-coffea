@@ -361,6 +361,14 @@ class VBFProcessor(processor.ProcessorABC):
                         add_scalevar_7pt(weights,[])
                         add_scalevar_3pt(weights,[])
 
+            if 'EWK' in dataset and self._systematics:
+                if "LHEScaleWeight" in events.fields:
+                    add_scalevar_7pt(weights, events.LHEScaleWeight)
+                    add_scalevar_3pt(weights, events.LHEScaleWeight)
+                else:
+                    add_scalevar_7pt(weights,[])
+                    add_scalevar_3pt(weights,[])
+                
             add_pileup_weight(weights, events.Pileup.nPU, self._year)
             bosons = getBosons(events.GenPart)
             matchedBoson = candidatejet.nearest(bosons, axis=None, threshold=0.8)

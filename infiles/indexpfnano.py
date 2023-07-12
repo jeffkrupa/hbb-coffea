@@ -125,6 +125,11 @@ folders_to_index = [
     "/store/group/lpcpfnano/jdickins/v2_2/2017/VBFHToBB",
     "/store/group/lpcpfnano/jdickins/v2_2/2018/VBFHToBB",
 
+    "/store/group/lpcpfnano/jdickins/v2_3/2016APV/VBFHToBB_Herwig",
+    "/store/group/lpcpfnano/jdickins/v2_3/2016/VBFHToBB_Herwig",
+    "/store/group/lpcpfnano/jdickins/v2_3/2017/VBFHToBB_Herwig",
+    "/store/group/lpcpfnano/jdickins/v2_3/2018/VBFHToBB_Herwig",
+
     "/store/group/lpcpfnano/jdickins/v2_2/2016APV/EWKV",
     "/store/group/lpcpfnano/jdickins/v2_2/2016/EWKV",
     "/store/group/lpcpfnano/jdickins/v2_2/2017/EWKV",
