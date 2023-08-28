@@ -48,6 +48,9 @@ def main():
                 outsum['templates'] = out['templates']
                 outsum['sumw'] = out['sumw']
                 started += 1
+            elif 'JetHT' in filename or 'QCD' in filename or 'VBFHToBBHerwig' in filename or 'EWK' in filename:
+                outsum['templates'].add(out['templates'].rebin("ddb1",hist.Bin("ddb1", "DDB1", [0,0.28,0.64,1])))
+                outsum['sumw'].add(out['sumw'])
             else:
                 outsum['templates'].add(out['templates'])
                 outsum['sumw'].add(out['sumw'])

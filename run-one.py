@@ -3,19 +3,24 @@ import subprocess
 import json
 import uproot
 import awkward as ak
+import pandas as pd
 
 from coffea import processor, util, hist
 from coffea.nanoevents import NanoEventsFactory, NanoAODSchema
-from boostedhiggs import VBFSTXSProcessor
+from boostedhiggs import VBFProcessor
 
 year = sys.argv[1]
 
 uproot.open.defaults["xrootd_handler"] = uproot.source.xrootd.MultithreadedXRootDSource
 
-p = VBFSTXSProcessor(year=year,jet_arbitration='ddb',systematics=False)
+if not os.path.isdir('outfiles/'):
+    os.mkdir('outfiles')
+
+p = VBFProcessor(year=year,jet_arbitration='ddb')
 args = {'savemetrics':True, 'schema':NanoAODSchema}
 
-this_file = "infiles/"+year+"_VBFHToBB.json"
+this_file = "infiles/"+year+"_EWKV.json"
+outfile = 'outfiles/'+str(year)+'_dask_EWKV.coffea'
 
 output = processor.run_uproot_job(
     this_file,
@@ -27,10 +32,8 @@ output = processor.run_uproot_job(
         "schema": processor.NanoAODSchema,
     },
     chunksize=10000,
-#    maxchunks=1,
+#    maxchunks=1,                                                                                                                               
 )
 
-outfile = 'outfiles-stxs/'+str(year)+'_dask_VBFHToBB.coffea'
 util.save(output, outfile)
 print("saved " + outfile)
-

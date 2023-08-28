@@ -98,6 +98,9 @@
     "VBF": [
         "VBFHToBBDipoleRecoilOn"
     ],
+    "VBF_Herwig": [
+        "VBFHToBB_Herwig"
+    ],
     "WH": [
         "WminusH_HToBB_WToQQ",
         "WplusH_HToBB_WToQQ",

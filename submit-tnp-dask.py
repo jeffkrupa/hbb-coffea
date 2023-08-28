@@ -20,11 +20,17 @@ env_extra = [
     f"export PYTHONPATH=$PYTHONPATH:{os.getcwd()}",
 ]
 
+
 cluster = LPCCondorCluster(
+    job_script_prologue=[
+        "export DASK_DISTRIBUTED__WORKER__PROFILE__INTERVAL=1d",
+        "export DASK_DISTRIBUTED__WORKER__PROFILE__CYCLE=2d",
+    ],
+    shared_temp_directory="/tmp",
     transfer_input_files=["boostedhiggs"],
     ship_env=True,
-    memory="14GB",
-#    image="coffeateam/coffea-dask:0.7.11-fastjet-3.3.4.0rc9-ga05a1f8",
+    memory="8GB",
+#    image="coffeateam/coffea-dask:0.7.20-fastjet-3.4.0.1-g4cab023"                                                 
 )
 
 if not os.path.isdir('outfiles-tnp/'):

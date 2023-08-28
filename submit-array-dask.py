@@ -24,8 +24,8 @@ cluster = LPCCondorCluster(
     shared_temp_directory="/tmp",
     transfer_input_files=["boostedhiggs"],
     ship_env=True,
-    memory="6GB",
-    image="coffeateam/coffea-dask:0.7.20-fastjet-3.4.0.1-g4cab023"
+    memory="2GB",
+#    image="coffeateam/coffea-dask-cc7-gateway:0.7.21-fastjet-3.4.0.1-gc3d707c"
 )
 
 if not os.path.isdir('outfiles-array/'):
@@ -50,7 +50,7 @@ with Client(cluster) as client:
             index = this_file.split("_")[1].split(".json")[0]
             outfile = 'outfiles-array/'+str(year)+'_dask_'+index+'.coffea'
 
-            if 'JetHT' not in index and 'VBF' not in index and 'GluGlu' not in index and 'QCD' not in index:
+            if 'JetHT' not in index: # and 'VBF' not in index and 'GluGlu' not in index and 'QCD' not in index:
                 continue
 
             if os.path.isfile(outfile):

@@ -78,6 +78,9 @@ class VBFArrayProcessor(processor.ProcessorABC):
                 hist2.storage.Weight(),
             ),
             'genflavor': processor.column_accumulator(np.zeros(shape=(0,))),
+            'number': processor.column_accumulator(np.zeros(shape=(0,))),
+            'lumiblock': processor.column_accumulator(np.zeros(shape=(0,))),
+            'run': processor.column_accumulator(np.zeros(shape=(0,))),
             'pt': processor.column_accumulator(np.zeros(shape=(0,))),
             'eta': processor.column_accumulator(np.zeros(shape=(0,))),
             'phi': processor.column_accumulator(np.zeros(shape=(0,))),
@@ -94,6 +97,7 @@ class VBFArrayProcessor(processor.ProcessorABC):
             'subjet2_eta':processor.column_accumulator(np.zeros(shape=(0,))),
             'subjet2_phi':processor.column_accumulator(np.zeros(shape=(0,))),
             'njets': processor.column_accumulator(np.zeros(shape=(0,))),
+            'ht': processor.column_accumulator(np.zeros(shape=(0,))),
             'jet1_pt': processor.column_accumulator(np.zeros(shape=(0,))),
             'jet1_eta': processor.column_accumulator(np.zeros(shape=(0,))),
             'jet1_phi': processor.column_accumulator(np.zeros(shape=(0,))),
@@ -106,6 +110,7 @@ class VBFArrayProcessor(processor.ProcessorABC):
             'jet3_eta': processor.column_accumulator(np.zeros(shape=(0,))),
             'jet3_phi': processor.column_accumulator(np.zeros(shape=(0,))),
             'jet3_qgl': processor.column_accumulator(np.zeros(shape=(0,))),
+            'met': processor.column_accumulator(np.zeros(shape=(0,))),
             'weight': processor.column_accumulator(np.zeros(shape=(0,)))
         }
 
@@ -299,6 +304,9 @@ class VBFArrayProcessor(processor.ProcessorABC):
         jet1 = ak4_outside_ak8[:, 0:1]
         jet2 = ak4_outside_ak8[:, 1:2]
         jet3 = ak4_outside_ak8[:, 2:3]
+        jet4 = ak4_outside_ak8[:, 3:4]
+        
+        ht = ak.firsts(jet1).pt + ak.firsts(jet2).pt + ak.firsts(jet3).pt + ak.firsts(jet4).pt
 
         jet1_pt = ak.firsts(jet1).pt
         jet1_eta = ak.firsts(jet1).eta
@@ -409,6 +417,9 @@ class VBFArrayProcessor(processor.ProcessorABC):
         
         vbfcuts = selection.all(*regions['signal-vbf'])
         output['genflavor'] += processor.column_accumulator(normalize(genflavor,vbfcuts))
+        output['number'] += processor.column_accumulator(normalize(events.event,vbfcuts))
+        output['lumiblock'] += processor.column_accumulator(normalize(events.luminosityBlock,vbfcuts))
+        output['run'] += processor.column_accumulator(normalize(events.run,vbfcuts))
         output['pt'] += processor.column_accumulator(normalize(candidatejet.pt,vbfcuts))
         output['eta'] += processor.column_accumulator(normalize(candidatejet.eta,vbfcuts))
         output['phi'] += processor.column_accumulator(normalize(candidatejet.phi,vbfcuts))
@@ -419,6 +430,7 @@ class VBFArrayProcessor(processor.ProcessorABC):
         output['dphi'] += processor.column_accumulator(normalize(dphi,vbfcuts))
         output['mjj'] += processor.column_accumulator(normalize(mjj,vbfcuts))
         output['njets'] += processor.column_accumulator(normalize(njets,vbfcuts))
+        output['ht'] += processor.column_accumulator(normalize(ht,vbfcuts))
         output['jet1_pt'] += processor.column_accumulator(normalize(jet1_pt,vbfcuts))
         output['jet1_eta'] += processor.column_accumulator(normalize(jet1_eta,vbfcuts))
         output['jet1_phi'] += processor.column_accumulator(normalize(jet1_phi,vbfcuts))
@@ -431,12 +443,13 @@ class VBFArrayProcessor(processor.ProcessorABC):
         output['jet3_eta'] += processor.column_accumulator(normalize(jet3_eta,vbfcuts))
         output['jet3_phi'] += processor.column_accumulator(normalize(jet3_phi,vbfcuts))
         output['jet3_qgl'] += processor.column_accumulator(normalize(qgl3,vbfcuts))
-#        output['subjet1_pt'] += processor.column_accumulator(normalize(subjet1_pt,vbfcuts))
-#        output['subjet1_eta'] += processor.column_accumulator(normalize(subjet1_eta,vbfcuts))
-#        output['subjet1_phi'] += processor.column_accumulator(normalize(subjet1_phi,vbfcuts))
-#        output['subjet2_pt'] += processor.column_accumulator(normalize(subjet2_pt,vbfcuts))
-#        output['subjet2_eta'] += processor.column_accumulator(normalize(subjet2_eta,vbfcuts))
-#        output['subjet2_phi'] += processor.column_accumulator(normalize(subjet2_phi,vbfcuts))
+        #        output['subjet1_pt'] += processor.column_accumulator(normalize(subjet1_pt,vbfcuts))
+        #        output['subjet1_eta'] += processor.column_accumulator(normalize(subjet1_eta,vbfcuts))
+        #        output['subjet1_phi'] += processor.column_accumulator(normalize(subjet1_phi,vbfcuts))
+        #        output['subjet2_pt'] += processor.column_accumulator(normalize(subjet2_pt,vbfcuts))
+        #        output['subjet2_eta'] += processor.column_accumulator(normalize(subjet2_eta,vbfcuts))
+        #        output['subjet2_phi'] += processor.column_accumulator(normalize(subjet2_phi,vbfcuts))
+        output['met'] += processor.column_accumulator(normalize(met.pt,vbfcuts))
         output['weight'] += processor.column_accumulator(normalize(weights.weight(),vbfcuts))
 
         return {dataset: output}

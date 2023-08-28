@@ -104,6 +104,9 @@ def add_scalevar_7pt(weights,var_weights):
         if len(var_weights[0]) == 9: 
             up = np.maximum.reduce([var_weights[:,0],var_weights[:,1],var_weights[:,3],var_weights[:,5],var_weights[:,7],var_weights[:,8]])
             down = np.minimum.reduce([var_weights[:,0],var_weights[:,1],var_weights[:,3],var_weights[:,5],var_weights[:,7],var_weights[:,8]])
+        elif len(var_weights[0]) == 8:
+            up = np.maximum.reduce([var_weights[:,0],var_weights[:,1],var_weights[:,3],var_weights[:,4],var_weights[:,6],var_weights[:,7]])
+            down = np.minimum.reduce([var_weights[:,0],var_weights[:,1],var_weights[:,3],var_weights[:,4],var_weights[:,6],var_weights[:,7]])
         elif len(var_weights[0]) > 1:
             print("Scale variation vector has length ", len(var_weights[0]))
 
@@ -124,6 +127,9 @@ def add_scalevar_3pt(weights,var_weights):
         if len(var_weights[0]) == 9:
             up = np.maximum(var_weights[:,0], var_weights[:,8])
             down = np.minimum(var_weights[:,0], var_weights[:,8])
+        elif len(var_weights[0]) == 8:
+            up = np.maximum(var_weights[:,0], var_weights[:,7])
+            down = np.minimum(var_weights[:,0], var_weights[:,7])
         elif len(var_weights[0]) > 1:
             print("Scale variation vector has length ", len(var_weights[0]))
 

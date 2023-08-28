@@ -85,7 +85,7 @@ class WTagProcessor(processor.ProcessorABC):
                 hist.Bin('genflavor', 'Gen. jet flavor', [0, 1, 4]),
                 hist.Bin('msd1', r'Jet $m_{sd}$', 46, 40, 201),
                 hist.Bin('n2ddt', r'Jet N2DDT', [-1, 0, 1]),
-                hist.Bin('ddb1', r'Jet ddb score', [0,0.64,1])
+                hist.Bin('ddb1', r'Jet ddb score', [0,0.28,0.64,1])
             ),
         }
 

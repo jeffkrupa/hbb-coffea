@@ -8,6 +8,7 @@ from .tauveto import TauVetoProcessor
 from .vbfstxs import VBFSTXSProcessor
 from .vbfarray import VBFArrayProcessor
 from .btag import BTagEfficiency
+from .n2ddtprocessor import N2DDTProcessor
 
 __all__ = [
     '__version__',
@@ -19,5 +20,6 @@ __all__ = [
     'VHbbProcessor',
     'BTagEfficiency'
     'TauVetoProcessor',
-    'VBFArrayProcessor'
+    'VBFArrayProcessor',
+    'N2DDTProcessor'
 ]
